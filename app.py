@@ -14,6 +14,7 @@ from examples import examples
 from model import (
     decode,
     get_pretrained_model,
+    # get_punct_model,
     language_to_models,
     sample_rate,
 )
@@ -94,11 +95,11 @@ def process_uploaded_file(
     MyPrint(f"Processing uploaded file: {in_filename}")
     try:
         return process(
-            in_filename=in_filename,
             language=language,
             repo_id=repo_id,
             decoding_method=decoding_method,
             num_active_paths=num_active_paths,
+            in_filename=in_filename,
             add_punct=add_punct,
         )
     except Exception as e:
@@ -143,8 +144,8 @@ def process(
     repo_id: str,
     decoding_method: str,
     num_active_paths: int,
-    add_punct: str,
     in_filename: str,
+    add_punct: str = "No",
 ):
     MyPrint(f"language: {language}")
     MyPrint(f"repo_id: {repo_id}")
@@ -167,7 +168,6 @@ def process(
     )
 
     text = decode(recognizer, filename)
-    # Removed punctuation functionality as it's not needed for sense-voice model
 
     date_time = now.strftime("%Y-%m-%d %H:%M:%S.%f")
     end = time.time()
@@ -183,7 +183,10 @@ def process(
     Processing time: {end - start: .3f} s <br/>
     RTF: {end - start: .3f}/{duration: .3f} = {rtf:.3f} <br/>
     """
-    if rtf > 1:
+    if (
+        rtf > 1
+        and repo_id != "csukuangfj/sherpa-onnx-fire-red-asr-large-zh_en-2025-02-16"
+    ):
         info += (
             "<br/>We are loading the model for the first run. "
             "Please run again to measure the real RTF.<br/>"
@@ -286,9 +289,9 @@ with demo:
     )
 
     punct_radio = gr.Radio(
-        label="Whether to add punctuation (Not supported for sense-voice model)",
+        label="Whether to add punctuation (Only for Chinese)",
         choices=["Yes", "No"],
-        value="No",
+        value="Yes",
     )
 
     with gr.Tabs():
@@ -394,4 +397,16 @@ with demo:
 
     gr.Markdown(description)
 
-demo.launch(debug=True)
+torch.set_num_threads(1)
+torch.set_num_interop_threads(1)
+
+torch._C._jit_set_profiling_executor(False)
+torch._C._jit_set_profiling_mode(False)
+torch._C._set_graph_executor_optimize(False)
+
+if __name__ == "__main__":
+    formatter = "%(asctime)s %(levelname)s [%(filename)s:%(lineno)d] %(message)s"
+
+    logging.basicConfig(format=formatter, level=logging.INFO)
+
+    demo.launch()
