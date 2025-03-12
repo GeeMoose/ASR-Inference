@@ -138,6 +138,13 @@ def process_microphone(
         return "", build_html_output(str(e), "result_item_error")
 
 
+def cleanup_gpu_memory():
+    """清理 GPU 内存"""
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        MyPrint("GPU memory cleared")
+
+
 @torch.no_grad()
 def process(
     language: str,
@@ -146,12 +153,17 @@ def process(
     num_active_paths: int,
     in_filename: str,
     add_punct: str = "No",
+    device_choice: str = "GPU",
 ):
     MyPrint(f"language: {language}")
     MyPrint(f"repo_id: {repo_id}")
     MyPrint(f"decoding_method: {decoding_method}")
     MyPrint(f"num_active_paths: {num_active_paths}")
     MyPrint(f"in_filename: {in_filename}")
+
+    # 检查 GPU 是否可用
+    device = torch.device("cuda" if (torch.cuda.is_available() and device_choice == "GPU") else "cpu")
+    MyPrint(f"Using device: {device}")
 
     filename = convert_to_wav(in_filename)
 
@@ -165,9 +177,10 @@ def process(
         repo_id,
         decoding_method=decoding_method,
         num_active_paths=num_active_paths,
+        device=device,  # 传递设备参数
     )
 
-    text = decode(recognizer, filename)
+    text = decode(recognizer, filename, device=device)  # 传递设备参数
 
     date_time = now.strftime("%Y-%m-%d %H:%M:%S.%f")
     end = time.time()
@@ -182,6 +195,7 @@ def process(
     Wave duration  : {duration: .3f} s <br/>
     Processing time: {end - start: .3f} s <br/>
     RTF: {end - start: .3f}/{duration: .3f} = {rtf:.3f} <br/>
+    Device: {device} <br/>
     """
     if (
         rtf > 1
@@ -195,7 +209,20 @@ def process(
     MyPrint(info)
     MyPrint(f"\nrepo_id: {repo_id}\nhyp: {text}")
 
+    # 处理完成后清理 GPU 内存
+    cleanup_gpu_memory()
+
     return text, build_html_output(info)
+
+
+def get_gpu_info():
+    """获取 GPU 信息"""
+    if torch.cuda.is_available():
+        gpu_count = torch.cuda.device_count()
+        gpu_names = [torch.cuda.get_device_name(i) for i in range(gpu_count)]
+        return f"GPU 可用: {gpu_count} 个 ({', '.join(gpu_names)})"
+    else:
+        return "GPU 不可用，使用 CPU 模式"
 
 
 title = "# Automatic Speech Recognition with Next-gen Kaldi"
@@ -256,6 +283,7 @@ demo = gr.Blocks(css=css)
 
 with demo:
     gr.Markdown(title)
+    gr.Markdown(f"**{get_gpu_info()}**")
     language_choices = list(language_to_models.keys())
 
     language_radio = gr.Radio(
@@ -292,6 +320,12 @@ with demo:
         label="Whether to add punctuation (Only for Chinese)",
         choices=["Yes", "No"],
         value="Yes",
+    )
+
+    device_radio = gr.Radio(
+        label="计算设备",
+        choices=["GPU", "CPU"],
+        value="GPU" if torch.cuda.is_available() else "CPU",
     )
 
     with gr.Tabs():
